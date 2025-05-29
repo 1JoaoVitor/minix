@@ -360,7 +360,10 @@ void prepare_shutdown(const int how)
    * do shutdown work.  Set a watchog timer to call shutdown(). The timer 
    * argument passes the shutdown status. 
    */
-  printf("MINIX will now be shut down ...\n");
+  printf("=======================================
+	| ATE A PROXIMA - SO - UNIFESP 1s2025 |
+	| Projeto Pratico (N) - Equipe 13 |
+	=======================================\n");
   set_kernel_timer(&shutdown_timer, get_monotonic() + system_hz,
       minix_shutdown, how);
 }
