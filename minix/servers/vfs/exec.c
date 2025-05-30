@@ -110,9 +110,9 @@ static int get_read_vp(struct vfs_exec_info *execi,
 
 	/* Remember/overwrite the executable name if requested. */
 	if(copyprogname) {
-		char *cp = strrchr(fullpath, '/');
-		if(cp) cp++;
-		else cp = fullpath;
+		// char *cp = strrchr(fullpath, '/');
+		// if(cp) cp++;
+		// else cp = fullpath;
 		strlcpy(execi->args.progname, cp, sizeof(execi->args.progname));
 		execi->args.progname[sizeof(execi->args.progname)-1] = '\0';
 	}
