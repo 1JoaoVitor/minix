@@ -113,8 +113,11 @@ static int get_read_vp(struct vfs_exec_info *execi,
 		// char *cp = strrchr(fullpath, '/');
 		// if(cp) cp++;
 		// else cp = fullpath;
-		strlcpy(execi->args.progname, cp, sizeof(execi->args.progname));
-		execi->args.progname[sizeof(execi->args.progname)-1] = '\0';
+		// strlcpy(execi->args.progname, cp, sizeof(execi->args.progname));
+		// execi->args.progname[sizeof(execi->args.progname)-1] = '\0';
+		strlcpy(execi->args.progname, fullpath, sizeof(execi->args.progname));
+		execi->args.progname[sizeof(execi->args.progname) - 1] = '\0';
+
 	}
 
 	/* Open executable */
