@@ -332,21 +332,21 @@ void kmain(kinfo_t *local_cbi)
  *===========================================================================*/
 static void announce(void)
 {
-  /* Display the MINIX startup banner. */
-  printf("\nMINIX %s. "
+    /* Display the MINIX startup banner. */
+    printf("\nMINIX %s. "
 #ifdef PAE
-"(PAE) "
+           "(PAE) "
 #endif
 #ifdef _VCS_REVISION
-	"(" _VCS_REVISION ")\n"
+           "(" _VCS_REVISION ")\n"
 #endif
-	  printf("=======================================")
-	  printf("| Minix 3.4.0rc6 - SO - UNIFESP 1s2025 |")
-	  printf("| Projeto Pratico (N) - Equipe 13 |")
-	  printf("=======================================\n");
-	  
-      OS_RELEASE);
-  printf("MINIX is open source software, see http://www.minix3.org\n");
+           , OS_RELEASE);
+
+    printf("=======================================\n");
+    printf("| Minix 3.4.0rc6 - SO - UNIFESP 1s2025 |\n");
+    printf("| Projeto Pratico (N) - Equipe 13      |\n");
+    printf("=======================================\n");
+
 }
 
 /*===========================================================================*
@@ -354,19 +354,22 @@ static void announce(void)
  *===========================================================================*/
 void prepare_shutdown(const int how)
 {
-/* This function prepares to shutdown MINIX. */
-  static minix_timer_t shutdown_timer;
+    /* This function prepares to shutdown MINIX. */
+    static minix_timer_t shutdown_timer;
 
-  /* Continue after 1 second, to give processes a chance to get scheduled to 
-   * do shutdown work.  Set a watchog timer to call shutdown(). The timer 
-   * argument passes the shutdown status. 
-   */
-  printf("=======================================")
-  printf("| ATE A PROXIMA - SO - UNIFESP 1s2025 |")
-  printf("| Projeto Pratico (N) - Equipe 13 |")
-  printf("=======================================\n");
-  set_kernel_timer(&shutdown_timer, get_monotonic() + system_hz,
-      minix_shutdown, how);
+    /* Continue after 1 second, to give processes a chance to get scheduled to 
+     * do shutdown work.  Set a watchdog timer to call shutdown(). The timer 
+     * argument passes the shutdown status. 
+     */
+    printf("=======================================\n");
+    printf("| ATE A PROXIMA - SO - UNIFESP 1s2025 |\n");
+    printf("| Projeto Pratico (N) - Equipe 13     |\n");
+    printf("=======================================\n");
+
+    set_kernel_timer(&shutdown_timer,
+                     get_monotonic() + system_hz,
+                     minix_shutdown,
+                     how);
 }
 
 /*===========================================================================*
