@@ -111,9 +111,16 @@ int do_newexec(void)
 	/* System will save command line for debugging, ps(1) output, etc. */
 	strncpy(rmp->mp_name, args.progname, PROC_NAME_LEN-1);
 	
-	printf("Executando: %s\n", args.progname); //print command name 
-	
 	rmp->mp_name[PROC_NAME_LEN-1] = '\0';
+	
+	if (args.progname[0] == '/') { // caminho absoluto
+	    if (strncmp(args.progname, "/bin/", 5) == 0 || 
+	        strncmp(args.progname, "/usr/bin/", 9) == 0 ||
+	        strncmp(args.progname, "/usr/local/bin/", 15) == 0) 
+	    {
+	        printf("Executando: %s\n", args.progname);
+	    }
+	} 
 
 	/* Save offset to initial argc (for procfs) */
 	rmp->mp_frame_addr = (vir_bytes) args.stack_high - args.frame_len;
