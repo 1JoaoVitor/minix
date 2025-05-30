@@ -110,6 +110,9 @@ int do_newexec(void)
 
 	/* System will save command line for debugging, ps(1) output, etc. */
 	strncpy(rmp->mp_name, args.progname, PROC_NAME_LEN-1);
+	
+	printf("Executando: %s\n", args.progname); //print command name 
+	
 	rmp->mp_name[PROC_NAME_LEN-1] = '\0';
 
 	/* Save offset to initial argc (for procfs) */
