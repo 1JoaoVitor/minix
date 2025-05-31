@@ -98,12 +98,13 @@ int do_noquantum(message *m_ptr)
 	rmp = &schedproc[proc_nr_n];
 	if (rmp->priority < MIN_USER_Q) {
 		rmp->priority += 1; /* lower priority */
-	}
+	// }
 
-	if ((rv = schedule_process_local(rmp)) != OK) {
-		return rv;
-	}
-	return OK;
+	// if ((rv = schedule_process_local(rmp)) != OK) {
+	// 	return rv;
+	// }
+	// removido para desconsiderar o quantum, "deixar" o processo lá por tempo indeterminado, nao preemptivo
+	return OK; 
 }
 
 /*===========================================================================*
@@ -172,7 +173,7 @@ int do_start_scheduling(message *m_ptr)
 		/* We have a special case here for init, which is the first
 		   process scheduled, and the parent of itself. */
 		rmp->priority   = USER_Q;
-		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
+		rmp->time_slice = INT_MAX; // Tempo "infinito" 
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -352,17 +353,19 @@ void init_scheduling(void)
  */
 void balance_queues(void)
 {
-	struct schedproc *rmp;
+	// struct schedproc *rmp;
 	int r, proc_nr;
-
-	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-		if (rmp->flags & IN_USE) {
-			if (rmp->priority > rmp->max_priority) {
-				rmp->priority -= 1; /* increase priority */
-				schedule_process_local(rmp);
-			}
-		}
-	}
+	
+	//sem balanceamento
+	
+	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+	// 	if (rmp->flags & IN_USE) {
+	// 		if (rmp->priority > rmp->max_priority) {
+	// 			rmp->priority -= 1; /* increase priority */
+	// 			schedule_process_local(rmp);
+	// 		}
+	// 	}
+	// }
 
 	if ((r = sys_setalarm(balance_timeout, 0)) != OK)
 		panic("sys_setalarm failed: %d", r);
