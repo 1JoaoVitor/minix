@@ -193,20 +193,24 @@ int do_start_scheduling(message *m_ptr)
 		/* We have a special case here for system processes, for which
 		 * quanum and priority are set explicitly rather than inherited 
 		 * from the parent */
-		rmp->priority   = rmp->max_priority;
-		rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
+		// rmp->priority   = rmp->max_priority;
+		// rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
+		rmp->priority   = USER_Q;
+        	rmp->time_slice = INT_MAX;
 		break;
 		
 	case SCHEDULING_INHERIT:
 		/* Inherit current priority and time slice from parent. Since there
 		 * is currently only one scheduler scheduling the whole system, this
 		 * value is local and we assert that the parent endpoint is valid */
-		if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
-				&parent_nr_n)) != OK)
-			return rv;
+		// if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
+		// 		&parent_nr_n)) != OK)
+		// 	return rv;
 
-		rmp->priority = schedproc[parent_nr_n].priority;
-		rmp->time_slice = schedproc[parent_nr_n].time_slice;
+		// rmp->priority = schedproc[parent_nr_n].priority;
+		// rmp->time_slice = schedproc[parent_nr_n].time_slice;
+		rmp->priority   = USER_Q;
+        	rmp->time_slice = INT_MAX;
 		break;
 		
 	default: 
