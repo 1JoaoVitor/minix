@@ -109,24 +109,6 @@ int do_noquantum(message *m_ptr)
 	return OK; 
 }
 
-int do_noquantum(message *m_ptr)
-{
-
-
-    /* 2) Reprograma exatamente ESTE MESMO processo com quantum infinito novamente */
-    rmp->priority   = USER_Q;      /* mantém a mesma prioridade */
-    rmp->time_slice = INT_MAX;     /* “quantum” infinito */
-    if ((rv = schedule_process_local(rmp)) != OK) {
-        /* Se der erro, informe e devolva o erro */
-        printf("FCFS: erro ao reprogramar %d: %d\n", rmp->endpoint, rv);
-        return rv;
-    }
-
-    /* 3) Retorna OK indicando que já rearmou o quantum para esse processo */
-    return OK;
-}
-
-
 /*===========================================================================*
  *				do_stop_scheduling			     *
  *===========================================================================*/
