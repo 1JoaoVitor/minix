@@ -86,26 +86,46 @@ static void pick_cpu(struct schedproc * proc)
 
 int do_noquantum(message *m_ptr)
 {
-	// register struct schedproc *rmp;
-	// int rv, proc_nr_n;
+	register struct schedproc *rmp;
+	int rv, proc_nr_n;
 
-	// if (sched_isokendpt(m_ptr->m_source, &proc_nr_n) != OK) {
-	// 	printf("SCHED: WARNING: got an invalid endpoint in OOQ msg %u.\n",
-	// 	m_ptr->m_source);
-	// 	return EBADEPT;
-	// }
+	if (sched_isokendpt(m_ptr->m_source, &proc_nr_n) != OK) {
+		printf("SCHED: WARNING: got an invalid endpoint in OOQ msg %u.\n",
+		m_ptr->m_source);
+		return EBADEPT;
+	}
 
-	// rmp = &schedproc[proc_nr_n];
-	// if (rmp->priority < MIN_USER_Q) {
-		// rmp->priority += 1; /* lower priority */
-	// }
+	rmp = &schedproc[proc_nr_n];
+        /*Reprograma exatamente ESTE MESMO processo com quantum infinito novamente */
+        rmp->priority   = USER_Q;      /* mantém a mesma prioridade */
+        rmp->time_slice = INT_MAX;     /* “quantum” infinito */
+        if ((rv = schedule_process_local(rmp)) != OK) {
+	/* Se der erro, informe e devolva o erro */
+	printf("FCFS: erro ao reprogramar %d: %d\n", rmp->endpoint, rv);
+		return rv;
+        }  
 
-	// if ((rv = schedule_process_local(rmp)) != OK) {
-	// 	return rv;
-	// }
 	// removido para desconsiderar o quantum, "deixar" o processo lá por tempo indeterminado, nao preemptivo
 	return OK; 
 }
+
+int do_noquantum(message *m_ptr)
+{
+
+
+    /* 2) Reprograma exatamente ESTE MESMO processo com quantum infinito novamente */
+    rmp->priority   = USER_Q;      /* mantém a mesma prioridade */
+    rmp->time_slice = INT_MAX;     /* “quantum” infinito */
+    if ((rv = schedule_process_local(rmp)) != OK) {
+        /* Se der erro, informe e devolva o erro */
+        printf("FCFS: erro ao reprogramar %d: %d\n", rmp->endpoint, rv);
+        return rv;
+    }
+
+    /* 3) Retorna OK indicando que já rearmou o quantum para esse processo */
+    return OK;
+}
+
 
 /*===========================================================================*
  *				do_stop_scheduling			     *
