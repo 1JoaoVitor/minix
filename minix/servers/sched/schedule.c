@@ -15,6 +15,11 @@
 
 /* CONSTANTE PARA ATIVAR O MODO FCFS */
 #define FCFS_PRIORITY (NR_SCHED_QUEUES - 1)
+/* NOVA FLAG e senhra */
+#define FCFS_PROCESS    0x8     
+#define FCFS_MAGIC_NR   99      
+/* Usamos um bit não utilizado, como o 4º bit (1,2,4,8) */
+/* Um número que nunca será uma prioridade válida */
 
 static unsigned balance_timeout;
 
@@ -104,7 +109,7 @@ int do_noquantum(message *m_ptr)
    	printf("SCHED_DEBUG: do_noquantum para proc %d, max_prio=%u, prio=%u\n", rmp->endpoint, rmp->max_priority, rmp->priority);
 	
 	/* Se o processo NÃO é FCFS, aplica a política padrão MLFQ */
-	    if (rmp->max_priority != FCFS_PRIORITY) {
+	    if (!(rmp->flags & FCFS_PROCESS))  { 
 	        if (rmp->priority < MIN_USER_Q) {
 	            rmp->priority += 1; /* lower priority */
 	        }
@@ -214,10 +219,11 @@ int do_start_scheduling(message *m_ptr)
 	        return rv;
 	    
 	    /* Checa se o pai é um processo FCFS */
-	    if (schedproc[parent_nr_n].max_priority == FCFS_PRIORITY) {
-	        /* Se for, o filho também será FCFS */
-	        rmp->priority = FCFS_PRIORITY;
-	        rmp->max_priority = FCFS_PRIORITY;
+	    if (schedproc[parent_nr_n].flags & FCFS_PROCESS){
+		    /* Se o pai tem a flag FCFS, o filho também terá */
+		    rmp->flags |= FCFS_PROCESS;
+		    rmp->priority = USER_Q; /* Processos FCFS rodam em prioridade de usuário */
+		    rmp->max_priority = USER_Q; 
 	    } else {
 	        /* Senão, herda a prioridade normalmente (lógica MLFQ) */
 	        rmp->priority = schedproc[parent_nr_n].priority;
@@ -269,7 +275,7 @@ int do_start_scheduling(message *m_ptr)
 /*===========================================================================*
  *				do_nice					     *
  *===========================================================================*/
-
+/* VERSÃO FINAL E HÍBRIDA DO DO_NICE */
 int do_nice(message *m_ptr)
 {
     struct schedproc *rmp;
@@ -277,38 +283,44 @@ int do_nice(message *m_ptr)
     int proc_nr_n;
     unsigned new_q, old_q, old_max_q;
 
-    /* check who can send you requests */
     if (!accept_message(m_ptr))
         return EPERM;
 
     if (sched_isokendpt(m_ptr->m_pm_sched_scheduling_set_nice.endpoint, &proc_nr_n) != OK) {
-        printf("SCHED: WARNING: got an invalid endpoint in OoQ msg "
-            "%d\n", m_ptr->m_pm_sched_scheduling_set_nice.endpoint);
+        printf("SCHED: WARNING: got an invalid endpoint in OoQ msg %d\n",
+            m_ptr->m_pm_sched_scheduling_set_nice.endpoint);
         return EBADEPT;
     }
 
     rmp = &schedproc[proc_nr_n];
     new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
+    
+    /* NOSSO GATILHO MÁGICO */
+    if (new_q == FCFS_MAGIC_NR) {
+        /* Se recebermos o número mágico, apenas ativamos a flag e saímos */
+        printf("SCHED: FCFS mode activated for proc %d\n", rmp->endpoint);
+        rmp->flags |= FCFS_PROCESS;
+        return OK;
+    }
+
+    /* Se não for o número mágico, executa a lógica normal do 'nice' */
     if (new_q >= NR_SCHED_QUEUES) {
         return EINVAL;
     }
 
-    /* Store old values, in case we need to roll back the changes */
     old_q     = rmp->priority;
     old_max_q = rmp->max_priority;
 
-    /* Update the proc entry and reschedule the process */
     rmp->max_priority = rmp->priority = new_q;
 
     if ((rv = schedule_process_local(rmp)) != OK) {
-        /* Something went wrong when rescheduling the process, roll
-         * back the changes to proc struct */
         rmp->priority     = old_q;
         rmp->max_priority = old_max_q;
     }
 
     return rv;
 }
+
 /*===========================================================================*
  *				schedule_process			     *
  *===========================================================================*/
@@ -376,7 +388,7 @@ void balance_queues(void)
     for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
         if (rmp->flags & IN_USE) {
             /* Só balanceia se NÃO for um processo FCFS */
-            if (rmp->max_priority != FCFS_PRIORITY) {
+           if (!(rmp->flags & FCFS_PROCESS))  {
                 if (rmp->priority > rmp->max_priority) {
                     rmp->priority -= 1; /* increase priority */
                     schedule_process_local(rmp);
