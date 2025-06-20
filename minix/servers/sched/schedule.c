@@ -97,8 +97,6 @@ int do_noquantum(message *m_ptr)
 
 	rmp = &schedproc[proc_nr_n];
 
-	/* DEBUG: Imprime informações sobre o processo que esgotou o quantum */
-   	printf("SCHED_DEBUG: do_noquantum para proc %d, max_prio=%u, prio=%u\n", rmp->endpoint, rmp->max_priority, rmp->priority);
 	if (rmp->priority < MIN_USER_Q) {
 		rmp->priority += 1; /* lower priority */
 	}
@@ -188,8 +186,6 @@ int do_start_scheduling(message *m_ptr)
 		/* FIXME set the cpu mask */
 #endif
 	}
-
-	printf("SCHED_DEBUG: do_start_scheduling para proc %d (pai %d), max_prio inicial=%u\n", rmp->endpoint, rmp->parent, rmp->max_priority);
 	
 	switch (m_ptr->m_type) {
 
@@ -275,9 +271,6 @@ int do_nice(message *m_ptr)
 
 	rmp = &schedproc[proc_nr_n];
 	new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
-
-	 /* DEBUG: Imprime a chamada de nice */
-	printf("SCHED_DEBUG: do_nice para proc %d, nova max_prio=%u\n", rmp->endpoint, new_q);
 	
 	if (new_q >= NR_SCHED_QUEUES) {
 		return EINVAL;
