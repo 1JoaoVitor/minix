@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     m.m2_i1 = pid;
     m.m2_i2 = 99; // Nosso número mágico!
     
-    ret = _syscall(PM_PROC_NR, NICE, &m);
+    ret = _syscall(PM_PROC_NR, 23, &m);
     
     if (ret == 0) {
         printf("Sinal FCFS enviado para o processo %d.\n", pid);
