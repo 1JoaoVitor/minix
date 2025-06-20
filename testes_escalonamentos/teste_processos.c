@@ -14,6 +14,9 @@
 
 #include <lib.h> // Adicione este para getprocnr()
 
+#define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
+
+
 int main(int argc, char **argv) {
     /* A primeira coisa que o processo faz é anunciar seu endpoint */
     printf("O ENDPOINT DESTE PROCESSO PAI E: %d. USE ESTE NUMERO NO SCHEDULE.C\n", getprocnr());
