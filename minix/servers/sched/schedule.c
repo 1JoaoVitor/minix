@@ -13,6 +13,9 @@
 #include <minix/com.h>
 #include <machine/archtypes.h>
 
+/* CONSTANTE PARA ATIVAR O MODO FCFS */
+#define FCFS_PRIORITY (NR_SCHED_QUEUES - 1)
+
 static unsigned balance_timeout;
 
 #define BALANCE_TIMEOUT	5 /* how often to balance queues in seconds */
@@ -96,9 +99,13 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
-	// if (rmp->priority < MIN_USER_Q) {
-	// 	rmp->priority += 1; /* lower priority */
-	// }
+	
+	/* Se o processo NÃO é FCFS, aplica a política padrão MLFQ */
+	    if (rmp->max_priority != FCFS_PRIORITY) {
+	        if (rmp->priority < MIN_USER_Q) {
+	            rmp->priority += 1; /* lower priority */
+	        }
+	    }
 
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		return rv;
@@ -197,16 +204,22 @@ int do_start_scheduling(message *m_ptr)
 		break;
 		
 	case SCHEDULING_INHERIT:
-		/* Inherit current priority and time slice from parent. Since there
-		 * is currently only one scheduler scheduling the whole system, this
-		 * value is local and we assert that the parent endpoint is valid */
-		if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
-				&parent_nr_n)) != OK)
-			return rv;
-
-		rmp->priority = USER_Q;
-		rmp->time_slice = (unsigned)-1;
-		break;
+	    if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
+	        &parent_nr_n)) != OK)
+	        return rv;
+	    
+	    /* Checa se o pai é um processo FCFS */
+	    if (schedproc[parent_nr_n].max_priority == FCFS_PRIORITY) {
+	        /* Se for, o filho também será FCFS */
+	        rmp->priority = FCFS_PRIORITY;
+	        rmp->max_priority = FCFS_PRIORITY;
+	    } else {
+	        /* Senão, herda a prioridade normalmente (lógica MLFQ) */
+	        rmp->priority = schedproc[parent_nr_n].priority;
+	    }
+	
+	    rmp->time_slice = schedproc[parent_nr_n].time_slice;
+	    break;
 		
 	default: 
 		/* not reachable */
@@ -352,18 +365,21 @@ void init_scheduling(void)
  */
 void balance_queues(void)
 {
-	struct schedproc *rmp;
-	int r, proc_nr;
+    struct schedproc *rmp;
+    int r, proc_nr;
 
-	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-	// 	if (rmp->flags & IN_USE) {
-	// 		if (rmp->priority > rmp->max_priority) {
-	// 			rmp->priority -= 1; /* increase priority */
-	// 			schedule_process_local(rmp);
-	// 		}
-	// 	}
-	// }
+    for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
+        if (rmp->flags & IN_USE) {
+            /* Só balanceia se NÃO for um processo FCFS */
+            if (rmp->max_priority != FCFS_PRIORITY) {
+                if (rmp->priority > rmp->max_priority) {
+                    rmp->priority -= 1; /* increase priority */
+                    schedule_process_local(rmp);
+                }
+            }
+        }
+    }
 
-	if ((r = sys_setalarm(balance_timeout, 0)) != OK)
-		panic("sys_setalarm failed: %d", r);
+    if ((r = sys_setalarm(balance_timeout, 0)) != OK)
+        panic("sys_setalarm failed: %d", r);
 }
