@@ -5,22 +5,21 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 
 /* Includes para a chamada de sistema direta */
 #include <lib.h>
 #include <minix/callnr.h>
+#include <string.h> /* <-- INCLUA ESTE HEADER PARA memset */
 
 #define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
 
-int main(int argc, char **argv) {
+int main(int argc, char *argv[]) {
     message m;
 
-    /*
-     * SOLUÇÃO DEFINITIVA: O processo pai define sua própria política ANTES
-     * de criar qualquer filho, eliminando a condição de corrida.
-     * O valor 19 é um 'nice' válido que descobrimos que o PM traduz
-     * para a fila de prioridade 6, que é o nosso gatilho FCFS.
-     */
+    /* A CORREÇÃO: Limpamos a estrutura 'm' com zeros antes de usar */
+    memset(&m, 0, sizeof(message));
+
     printf("Definindo política FCFS para o processo pai %d...\n", getpid());
     m.m2_i1 = getpid(); // Alvo: este próprio processo
     m.m2_i2 = 19;       // O valor de 'nice' que gera a prioridade 6
@@ -48,13 +47,9 @@ int main(int argc, char **argv) {
     for(num=0; num<nproc; num++) {
         pid[num]=fork();
         if(pid[num]==0) {
-            // Lógica dos filhos permanece a mesma
             if((num % 2) == 0) { // IO-bound
                 gettimeofday(&p_start, NULL);
                 for(i=0; i<io_ops; i++){
-                    // Vamos remover o printf para não poluir a saída do teste
-                    // fprintf(stderr, "Proc:%d i=%ld\n", num, i);
-                    // fflush(stderr);
                 }
                 gettimeofday(&p_end, NULL);
                 timersub(&p_end, &p_start, &p_time);
