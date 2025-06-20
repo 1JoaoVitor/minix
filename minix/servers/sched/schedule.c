@@ -1,11 +1,11 @@
 /* This file contains the scheduling policy for SCHED
  *
  * The entry points are:
- *   do_noquantum:        Called on behalf of process' that run out of quantum
- *   do_start_scheduling  Request to start scheduling a proc
- *   do_stop_scheduling   Request to stop scheduling a proc
- *   do_nice		  Request to change the nice level on a proc
- *   init_scheduling      Called from main.c to set up/prepare scheduling
+ * do_noquantum: 		Called on behalf of process' that run out of quantum
+ * do_start_scheduling Request to start scheduling a proc
+ * do_stop_scheduling 	Request to stop scheduling a proc
+ * do_nice		 		Request to change the nice level on a proc
+ * init_scheduling 	Called from main.c to set up/prepare scheduling
  */
 #include "sched.h"
 #include "schedproc.h"
@@ -38,7 +38,10 @@ static int schedule_process(struct schedproc * rmp, unsigned flags);
 
 #define cpu_is_available(c)	(cpu_proc[c] >= 0)
 
-#define DEFAULT_USER_TIME_SLICE 200
+
+// Definimos um quantum padrão fixo para os processos de usuário.
+// Este será o 'time_slice' que cada processo receberá.
+#define ROUND_ROBIN_QUANTUM 30
 
 /* processes created by RS are sysytem processes */
 #define is_system_proc(p)	((p)->parent == RS_PROC_NR)
@@ -57,6 +60,8 @@ static void pick_cpu(struct schedproc * proc)
 	}
 
 	/* schedule sysytem processes only on the boot cpu */
+	// Tem a lógica de agendamento de processos de sistema na CPU de boot
+	// para estabilidade, mas eles também serão submetidos ao RR quantum.
 	if (is_system_proc(proc)) {
 		proc->cpu = machine.bsp_id;
 		return;
@@ -76,12 +81,12 @@ static void pick_cpu(struct schedproc * proc)
 	proc->cpu = cpu;
 	cpu_proc[cpu]++;
 #else
-	proc->cpu = 0;
+	proc->cpu = 0; // Para sistemas uniprocessadores
 #endif
 }
 
 /*===========================================================================*
- *				do_noquantum				     *
+ *				do_noquantum				 	    *
  *===========================================================================*/
 
 int do_noquantum(message *m_ptr)
@@ -96,10 +101,19 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
+	
+	// No Round Robin os processos são simplesmente são colocados de volta na fila de sua prioridade original (USER_Q).
 	// if (rmp->priority < MIN_USER_Q) {
 	// 	rmp->priority += 1; /* lower priority */
 	// }
 
+	// Garante que o processo retorne à fila USER_Q e com o quantum padrão,
+	// mesmo que a mensagem original tivesse outra prioridade/quantum.
+	rmp->priority = USER_Q;
+	rmp->max_priority = USER_Q; //prioridade máxima consistente
+	rmp->time_slice = ROUND_ROBIN_QUANTUM;
+
+	// 'schedule_process_local' reagenda o processo com as novas (ou fixas) configurações.
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		return rv;
 	}
@@ -107,7 +121,7 @@ int do_noquantum(message *m_ptr)
 }
 
 /*===========================================================================*
- *				do_stop_scheduling			     *
+ *				do_stop_scheduling			 	    *
  *===========================================================================*/
 int do_stop_scheduling(message *m_ptr)
 {
@@ -119,7 +133,7 @@ int do_stop_scheduling(message *m_ptr)
 		return EPERM;
 
 	if (sched_isokendpt(m_ptr->m_lsys_sched_scheduling_stop.endpoint,
-		    &proc_nr_n) != OK) {
+		 	 &proc_nr_n) != OK) {
 		printf("SCHED: WARNING: got an invalid endpoint in OOQ msg "
 		"%d\n", m_ptr->m_lsys_sched_scheduling_stop.endpoint);
 		return EBADEPT;
@@ -135,7 +149,7 @@ int do_stop_scheduling(message *m_ptr)
 }
 
 /*===========================================================================*
- *				do_start_scheduling			     *
+ *				do_start_scheduling			 	    *
  *===========================================================================*/
 int do_start_scheduling(message *m_ptr)
 {
@@ -158,10 +172,13 @@ int do_start_scheduling(message *m_ptr)
 	rmp = &schedproc[proc_nr_n];
 
 	/* Populate process slot */
-	rmp->endpoint     = m_ptr->m_lsys_sched_scheduling_start.endpoint;
-	rmp->parent       = m_ptr->m_lsys_sched_scheduling_start.parent;
-	rmp->max_priority = m_ptr->m_lsys_sched_scheduling_start.maxprio;
+	rmp->endpoint 	 = m_ptr->m_lsys_sched_scheduling_start.endpoint;
+	rmp->parent 	 = m_ptr->m_lsys_sched_scheduling_start.parent;
+	
+	// Ignoramos o maxprio da mensagem e forçamos USER_Q.
+	rmp->max_priority = USER_Q; // Define a prioridade máxima para USER_Q
 	if (rmp->max_priority >= NR_SCHED_QUEUES) {
+		// Um erro se USER_Q for maior que a quant de filas
 		return EINVAL;
 	}
 
@@ -170,9 +187,9 @@ int do_start_scheduling(message *m_ptr)
 	 * value is local and we assert that the parent endpoint is valid */
 	if (rmp->endpoint == rmp->parent) {
 		/* We have a special case here for init, which is the first
-		   process scheduled, and the parent of itself. */
-		rmp->priority   = USER_Q;
-		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
+		 * process scheduled, and the parent of itself. */
+		rmp->priority 	= USER_Q; // Init vai para a fila de usuário
+		rmp->time_slice = ROUND_ROBIN_QUANTUM; // E recebe o quantum padrão de RR
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -192,8 +209,9 @@ int do_start_scheduling(message *m_ptr)
 		/* We have a special case here for system processes, for which
 		 * quanum and priority are set explicitly rather than inherited 
 		 * from the parent */
-		rmp->priority   = USER_Q;
-		rmp->time_slice = (unsigned)-1
+		// Para processos de sistema (is_system_proc), também forçamos RR.
+		rmp->priority 	= USER_Q;
+		rmp->time_slice = ROUND_ROBIN_QUANTUM;
 		break;
 		
 	case SCHEDULING_INHERIT:
@@ -204,8 +222,9 @@ int do_start_scheduling(message *m_ptr)
 				&parent_nr_n)) != OK)
 			return rv;
 
+		// Processos que herdam tem prioridade USER_Q e quantum RR.
 		rmp->priority = USER_Q;
-		rmp->time_slice = (unsigned)-1;
+		rmp->time_slice = ROUND_ROBIN_QUANTUM;
 		break;
 		
 	default: 
@@ -249,14 +268,14 @@ int do_start_scheduling(message *m_ptr)
 }
 
 /*===========================================================================*
- *				do_nice					     *
+ *				do_nice					 	    *
  *===========================================================================*/
 int do_nice(message *m_ptr)
 {
 	struct schedproc *rmp;
 	int rv;
 	int proc_nr_n;
-	unsigned new_q, old_q, old_max_q;
+	unsigned old_q, old_max_q; // new_q não será mais usado para prioridade, mas pode vir na msg
 
 	/* check who can send you requests */
 	if (!accept_message(m_ptr))
@@ -269,30 +288,36 @@ int do_nice(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
+	// Não usamos o new_q
 	// new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
 	// if (new_q >= NR_SCHED_QUEUES) {
 	// 	return EINVAL;
 	// }
 
 	/* Store old values, in case we need to roll back the changes */
-	old_q     = rmp->priority;
+	old_q 	  = rmp->priority;
 	old_max_q = rmp->max_priority;
 
 	/* Update the proc entry and reschedule the process */
-	rmp->max_priority = rmp->priority = new_q;
+	// Forcando ir para USER_Q.
+	rmp->max_priority = USER_Q;
+	rmp->priority = USER_Q;
+	// Quantum padrão
+	rmp->time_slice = ROUND_ROBIN_QUANTUM;
 
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		/* Something went wrong when rescheduling the process, roll
 		 * back the changes to proc struct */
-		rmp->priority     = old_q;
-		rmp->max_priority = old_max_q;
+		rmp->priority 	  = old_q; // Será USER_Q se não mudamos nada
+		rmp->max_priority = old_max_q; // Será USER_Q
+		rmp->time_slice = ROUND_ROBIN_QUANTUM; // Quantum RR
 	}
 
 	return rv;
 }
 
 /*===========================================================================*
- *				schedule_process			     *
+ *				schedule_process			 	    *
  *===========================================================================*/
 static int schedule_process(struct schedproc * rmp, unsigned flags)
 {
@@ -302,12 +327,13 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 	pick_cpu(rmp);
 
 	if (flags & SCHEDULE_CHANGE_PRIO)
-		new_prio = rmp->priority;
+		new_prio = rmp->priority; // Já definido para USER_Q
 	else
 		new_prio = -1;
 
+	// Sempre utiliza o ROUND_ROBIN_QUANTUM para todos os processos agendados.
 	if (flags & SCHEDULE_CHANGE_QUANTUM)
-		new_quantum = rmp->time_slice;
+		new_quantum = rmp->time_slice; // rmp->time_slice = ROUND_ROBIN_QUANTUM
 	else
 		new_quantum = -1;
 
@@ -316,7 +342,10 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 	else
 		new_cpu = -1;
 
-	niced = (rmp->max_priority > USER_Q);
+	// A flag 'niced' não tem mais o mesmo significado para prioridade
+	// Podemos mantê-lo com base na prioridade *original* do processo, ou simplificar para 0.
+	// Para manter a compatibilidade mínima com o kernel, mantemos a verificação.
+	niced = (rmp->max_priority > USER_Q); // Será false para todos os processos RR, pois max_priority = USER_Q
 
 	if ((err = sys_schedule(rmp->endpoint, new_prio,
 		new_quantum, new_cpu, niced)) != OK) {
@@ -329,7 +358,7 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 
 
 /*===========================================================================*
- *				init_scheduling				     *
+ *				init_scheduling				 	    *
  *===========================================================================*/
 void init_scheduling(void)
 {
@@ -342,27 +371,15 @@ void init_scheduling(void)
 }
 
 /*===========================================================================*
- *				balance_queues				     *
+ *				balance_queues				 	    *
  *===========================================================================*/
 
-/* This function in called every N ticks to rebalance the queues. The current
- * scheduler bumps processes down one priority when ever they run out of
- * quantum. This function will find all proccesses that have been bumped down,
- * and pulls them back up. This default policy will soon be changed.
- */
 void balance_queues(void)
 {
-	struct schedproc *rmp;
-	int r, proc_nr;
-
-	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
-	// 	if (rmp->flags & IN_USE) {
-	// 		if (rmp->priority > rmp->max_priority) {
-	// 			rmp->priority -= 1; /* increase priority */
-	// 			schedule_process_local(rmp);
-	// 		}
-	// 	}
-	// }
+	// Esta função é redundante para um Round Robin:
+	// 1. Não rebaixamos prioridades em do_noquantum.
+	// 2. Todos os processos de usuário estão na mesma fila de prioridade (USER_Q).
+	int r; 
 
 	if ((r = sys_setalarm(balance_timeout, 0)) != OK)
 		panic("sys_setalarm failed: %d", r);
