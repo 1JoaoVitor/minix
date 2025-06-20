@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <unistd.hh>
+#include <unistd.h>
 #include <minix/syslib.h>
 #include <minix/endpoint.h>
 
