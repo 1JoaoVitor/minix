@@ -11,10 +11,11 @@
 #include <lib.h>
 #include <minix/callnr.h>
 #include <string.h>
+#define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
+#include <minix/syslib.h>
 
 #include <lib.h> // Adicione este para getprocnr()
 
-#define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
 
 
 int main(int argc, char **argv) {
