@@ -6,22 +6,10 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 
 #define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
 
 int main(int argc, char **argv) {
-                /*
-             * SOLUÇÃO DEFINITIVA: O processo pai define sua própria prioridade
-             * antes de criar qualquer filho. Isso evita a condição de corrida.
-             * O valor 15 corresponde ao 'nice -n 15'.
-             */
-        if (setpriority(PRIO_PROCESS, 0, 15) != 0) {
-                perror("setpriority");
-                fprintf(stderr, "Nao foi possivel definir a prioridade.\n");
-                return -1;
-            }
-        fprintf(stderr, "Processo pai %d definido com nice 15. Filhos herdarao a politica.\n", getpid());
         struct timeval p_start, p_end, p_time;
         int *pid;
         unsigned long int x=1;
