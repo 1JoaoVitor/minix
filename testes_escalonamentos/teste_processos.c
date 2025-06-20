@@ -10,19 +10,21 @@
 /* Includes para a chamada de sistema direta */
 #include <lib.h>
 #include <minix/callnr.h>
-#include <string.h> /* <-- INCLUA ESTE HEADER PARA memset */
+#include <string.h>
 
 #define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     message m;
 
-    /* A CORREÇÃO: Limpamos a estrutura 'm' com zeros antes de usar */
     memset(&m, 0, sizeof(message));
 
     printf("Definindo política FCFS para o processo pai %d...\n", getpid());
-    m.m2_i1 = getpid(); // Alvo: este próprio processo
-    m.m2_i2 = 19;       // O valor de 'nice' que gera a prioridade 6
+    
+    /* AQUI ESTÁ A CORREÇÃO FINAL DOS CAMPOS DA MENSAGEM */
+    m.m1_i1 = 19;       // O valor 'nice' (19) vai em m1_i1
+    m.m1_i2 = getpid(); // O PID alvo (o próprio processo) vai em m1_i2
+    
     if (_syscall(PM_PROC_NR, 23, &m) != 0) { // 23 é o número da chamada NICE
         perror("syscall NICE falhou");
         return -1;
