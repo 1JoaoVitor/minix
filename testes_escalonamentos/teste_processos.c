@@ -12,9 +12,14 @@
 #include <minix/callnr.h>
 #include <string.h>
 
-#define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
+#include <lib.h> // Adicione este para getprocnr()
 
 int main(int argc, char **argv) {
+    /* A primeira coisa que o processo faz é anunciar seu endpoint */
+    printf("O ENDPOINT DESTE PROCESSO PAI E: %d. USE ESTE NUMERO NO SCHEDULE.C\n", getprocnr());
+    fflush(stdout); // Garante que a mensagem seja impressa imediatamente
+
+    /* ... o resto do seu código main continua normalmente aqui ... */
     message m;
 
     memset(&m, 0, sizeof(message));
