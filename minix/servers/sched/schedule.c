@@ -91,17 +91,25 @@ int do_start_scheduling(message *m_ptr) {
 	}
 
 	switch (m_ptr->m_type) {
+
 	case SCHEDULING_START:
-		rmp->priority = rmp->max_priority;
-		rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
-		break;
+	    rmp->priority   = rmp->max_priority;
+	    rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
+	    break;
+	    
 	case SCHEDULING_INHERIT:
-		if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent, &parent_nr_n)) != OK) return rv;
-		rmp->priority = USER_Q; /* Força todos os filhos de usuário para a mesma fila */
-		rmp->time_slice = schedproc[parent_nr_n].time_slice;
-		break;
-	default:
-		assert(0);
+	    if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
+	        &parent_nr_n)) != OK)
+	        return rv;
+	    rmp->priority = USER_Q; /* Força todos os filhos de usuário para a mesma fila */
+	    
+	    /* AQUI ESTÁ A MUDANÇA CRUCIAL */
+	    rmp->time_slice = 5000; /* Dê um quantum gigante (5000 ticks) */
+	
+	    break;
+	    
+	default: 
+	    assert(0);
 	}
 	if ((rv = sys_schedctl(0, rmp->endpoint, 0, 0, 0)) != OK) { return rv; }
 	rmp->flags = IN_USE;
