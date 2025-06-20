@@ -96,17 +96,14 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
-        /*Reprograma exatamente ESTE MESMO processo com quantum infinito novamente */
-        rmp->priority   = USER_Q;      /* mantém a mesma prioridade */
-        rmp->time_slice = INT_MAX;     /* “quantum” infinito */
-        if ((rv = schedule_process_local(rmp)) != OK) {
-	/* Se der erro, informe e devolva o erro */
-	printf("FCFS: erro ao reprogramar %d: %d\n", rmp->endpoint, rv);
-		return rv;
-        }  
+	// if (rmp->priority < MIN_USER_Q) {
+	// 	rmp->priority += 1; /* lower priority */
+	// }
 
-	// removido para desconsiderar o quantum, "deixar" o processo lá por tempo indeterminado, nao preemptivo
-	return OK; 
+	if ((rv = schedule_process_local(rmp)) != OK) {
+		return rv;
+	}
+	return OK;
 }
 
 /*===========================================================================*
@@ -175,7 +172,7 @@ int do_start_scheduling(message *m_ptr)
 		/* We have a special case here for init, which is the first
 		   process scheduled, and the parent of itself. */
 		rmp->priority   = USER_Q;
-		rmp->time_slice = INT_MAX; // Tempo "infinito" 
+		rmp->time_slice = DEFAULT_USER_TIME_SLICE;
 
 		/*
 		 * Since kernel never changes the cpu of a process, all are
@@ -195,24 +192,20 @@ int do_start_scheduling(message *m_ptr)
 		/* We have a special case here for system processes, for which
 		 * quanum and priority are set explicitly rather than inherited 
 		 * from the parent */
-		// rmp->priority   = rmp->max_priority;
-		// rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
 		rmp->priority   = USER_Q;
-        	rmp->time_slice = INT_MAX;
+		rmp->time_slice = (unsigned)-1
 		break;
 		
 	case SCHEDULING_INHERIT:
 		/* Inherit current priority and time slice from parent. Since there
 		 * is currently only one scheduler scheduling the whole system, this
 		 * value is local and we assert that the parent endpoint is valid */
-		// if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
-		// 		&parent_nr_n)) != OK)
-		// 	return rv;
+		if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
+				&parent_nr_n)) != OK)
+			return rv;
 
-		// rmp->priority = schedproc[parent_nr_n].priority;
-		// rmp->time_slice = schedproc[parent_nr_n].time_slice;
-		rmp->priority   = USER_Q;
-        	rmp->time_slice = INT_MAX;
+		rmp->priority = USER_Q;
+		rmp->time_slice = (unsigned)-1;
 		break;
 		
 	default: 
@@ -276,10 +269,10 @@ int do_nice(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
-	new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
-	if (new_q >= NR_SCHED_QUEUES) {
-		return EINVAL;
-	}
+	// new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
+	// if (new_q >= NR_SCHED_QUEUES) {
+	// 	return EINVAL;
+	// }
 
 	/* Store old values, in case we need to roll back the changes */
 	old_q     = rmp->priority;
@@ -359,11 +352,9 @@ void init_scheduling(void)
  */
 void balance_queues(void)
 {
-	// struct schedproc *rmp;
+	struct schedproc *rmp;
 	int r, proc_nr;
-	
-	//sem balanceamento
-	
+
 	// for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
 	// 	if (rmp->flags & IN_USE) {
 	// 		if (rmp->priority > rmp->max_priority) {
