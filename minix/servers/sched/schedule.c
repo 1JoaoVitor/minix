@@ -193,7 +193,7 @@ int do_start_scheduling(message *m_ptr)
 		 * quanum and priority are set explicitly rather than inherited 
 		 * from the parent */
 		rmp->priority   = USER_Q;
-		rmp->time_slice = (unsigned)-1
+		rmp->time_slice = (unsigned)-1;
 		break;
 		
 	case SCHEDULING_INHERIT:
