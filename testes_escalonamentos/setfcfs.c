@@ -20,7 +20,7 @@ int main(int argc, char *argv[])
     /* Esta é uma chamada de sistema de baixo nível para o PM */
     /* que irá resultar em uma chamada para do_nice no sched */
     m.m2_i1 = pid;
-    m.m2_i2 = 99; // Nosso número mágico!
+    m.m2_i2 = 19; // Nosso número mágico!
     
     ret = _syscall(PM_PROC_NR, 23, &m);
     
