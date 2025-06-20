@@ -1,85 +1,16 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-
-/* Includes para a chamada de sistema direta */
-#include <lib.h>
-#include <minix/callnr.h>
-#include <string.h>
-#define SEC(tv) (tv.tv_sec + tv.tv_usec/1e6)
+#include <unistd.hh>
 #include <minix/syslib.h>
+#include <minix/endpoint.h>
 
-#include <lib.h> // Adicione este para getprocnr()
+int main(int argc, char *argv[]) {
+    endpoint_t meu_endpoint;
 
-
-
-int main(int argc, char **argv) {
-    /* A primeira coisa que o processo faz é anunciar seu endpoint */
-    printf("O ENDPOINT DESTE PROCESSO PAI E: %d. USE ESTE NUMERO NO SCHEDULE.C\n", getprocnr());
-    fflush(stdout); // Garante que a mensagem seja impressa imediatamente
-
-    /* ... o resto do seu código main continua normalmente aqui ... */
-    message m;
-
-    memset(&m, 0, sizeof(message));
-
-    printf("Definindo política FCFS para o processo pai %d...\n", getpid());
-    
-    /* AQUI ESTÁ A CORREÇÃO FINAL DOS CAMPOS DA MENSAGEM */
-    m.m1_i1 = 19;       // O valor 'nice' (19) vai em m1_i1
-    m.m1_i2 = getpid(); // O PID alvo (o próprio processo) vai em m1_i2
-    
-    if (_syscall(PM_PROC_NR, 23, &m) != 0) { // 23 é o número da chamada NICE
-        perror("syscall NICE falhou");
-        return -1;
-    }
-    printf("Política definida com sucesso. Criando processos filhos...\n");
-    
-    struct timeval p_start, p_end, p_time;
-    int *pid;
-    unsigned long int x=1;
-    int num, nproc, io_ops, cpu_ops;
-    long int i=0;
-
-    if (argc != 4) {
-        printf("Uso: %s <num_procs> <IO_ops> <CPU_ops>\n", argv[0]);
-        return 0;
-    }
-    nproc = atoi(argv[1]);
-    io_ops = atoi(argv[2]);
-    cpu_ops = atoi(argv[3]);
-    pid = (int *)calloc(nproc, sizeof(int));
-
-    for(num=0; num<nproc; num++) {
-        pid[num]=fork();
-        if(pid[num]==0) {
-            if((num % 2) == 0) { // IO-bound
-                gettimeofday(&p_start, NULL);
-                for(i=0; i<io_ops; i++){
-                }
-                gettimeofday(&p_end, NULL);
-                timersub(&p_end, &p_start, &p_time);
-                printf("IO\t %d\t %g\n",num, SEC(p_time));
-            } else { // CPU-bound
-                gettimeofday(&p_start, NULL);
-                for(i=0; i<cpu_ops; i++){
-                    x = (x << 4) - (x << 4);
-                }
-                gettimeofday(&p_end, NULL);
-                timersub(&p_end, &p_start, &p_time);
-                printf("CPU\t %d\t %g\n",num, SEC(p_time));
-            }
-            exit(0);
-        }
-    }
-
-    for(i=0; i<nproc; i++) {
-        wait(NULL);
+    // A única coisa que este programa faz é descobrir e imprimir seu próprio endpoint
+    if (getprocnr(getpid(), &meu_endpoint) == 0) {
+        printf("ANOTE ESTE NUMERO -> Endpoint do processo de teste: %d\n", meu_endpoint);
+    } else {
+        fprintf(stderr, "Erro ao obter o endpoint.\n");
     }
     return 0;
 }
