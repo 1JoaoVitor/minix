@@ -99,6 +99,9 @@ int do_noquantum(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
+
+	/* DEBUG: Imprime informações sobre o processo que esgotou o quantum */
+   	printf("SCHED_DEBUG: do_noquantum para proc %d, max_prio=%u, prio=%u\n", rmp->endpoint, rmp->max_priority, rmp->priority);
 	
 	/* Se o processo NÃO é FCFS, aplica a política padrão MLFQ */
 	    if (rmp->max_priority != FCFS_PRIORITY) {
@@ -192,16 +195,18 @@ int do_start_scheduling(message *m_ptr)
 		/* FIXME set the cpu mask */
 #endif
 	}
+
+	printf("SCHED_DEBUG: do_start_scheduling para proc %d (pai %d), max_prio inicial=%u\n", rmp->endpoint, rmp->parent, rmp->max_priority);
 	
 	switch (m_ptr->m_type) {
 
 	case SCHEDULING_START:
-		/* We have a special case here for system processes, for which
-		 * quanum and priority are set explicitly rather than inherited 
-		 * from the parent */
-		rmp->priority   = USER_Q;
-		rmp->time_slice = (unsigned)-1;
-		break;
+	    /* We have a special case here for system processes, for which
+	     * quanum and priority are set explicitly rather than inherited 
+	     * from the parent */
+	    rmp->priority   = rmp->max_priority;
+	    rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
+	    break;
 		
 	case SCHEDULING_INHERIT:
 	    if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
@@ -264,46 +269,46 @@ int do_start_scheduling(message *m_ptr)
 /*===========================================================================*
  *				do_nice					     *
  *===========================================================================*/
+
 int do_nice(message *m_ptr)
 {
-	struct schedproc *rmp;
-	int rv;
-	int proc_nr_n;
-	unsigned new_q, old_q, old_max_q;
+    struct schedproc *rmp;
+    int rv;
+    int proc_nr_n;
+    unsigned new_q, old_q, old_max_q;
 
-	/* check who can send you requests */
-	if (!accept_message(m_ptr))
-		return EPERM;
+    /* check who can send you requests */
+    if (!accept_message(m_ptr))
+        return EPERM;
 
-	if (sched_isokendpt(m_ptr->m_pm_sched_scheduling_set_nice.endpoint, &proc_nr_n) != OK) {
-		printf("SCHED: WARNING: got an invalid endpoint in OoQ msg "
-		"%d\n", m_ptr->m_pm_sched_scheduling_set_nice.endpoint);
-		return EBADEPT;
-	}
+    if (sched_isokendpt(m_ptr->m_pm_sched_scheduling_set_nice.endpoint, &proc_nr_n) != OK) {
+        printf("SCHED: WARNING: got an invalid endpoint in OoQ msg "
+            "%d\n", m_ptr->m_pm_sched_scheduling_set_nice.endpoint);
+        return EBADEPT;
+    }
 
-	rmp = &schedproc[proc_nr_n];
-	// new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
-	// if (new_q >= NR_SCHED_QUEUES) {
-	// 	return EINVAL;
-	// }
+    rmp = &schedproc[proc_nr_n];
+    new_q = m_ptr->m_pm_sched_scheduling_set_nice.maxprio;
+    if (new_q >= NR_SCHED_QUEUES) {
+        return EINVAL;
+    }
 
-	/* Store old values, in case we need to roll back the changes */
-	old_q     = rmp->priority;
-	old_max_q = rmp->max_priority;
+    /* Store old values, in case we need to roll back the changes */
+    old_q     = rmp->priority;
+    old_max_q = rmp->max_priority;
 
-	/* Update the proc entry and reschedule the process */
-	rmp->max_priority = rmp->priority = new_q;
+    /* Update the proc entry and reschedule the process */
+    rmp->max_priority = rmp->priority = new_q;
 
-	if ((rv = schedule_process_local(rmp)) != OK) {
-		/* Something went wrong when rescheduling the process, roll
-		 * back the changes to proc struct */
-		rmp->priority     = old_q;
-		rmp->max_priority = old_max_q;
-	}
+    if ((rv = schedule_process_local(rmp)) != OK) {
+        /* Something went wrong when rescheduling the process, roll
+         * back the changes to proc struct */
+        rmp->priority     = old_q;
+        rmp->max_priority = old_max_q;
+    }
 
-	return rv;
+    return rv;
 }
-
 /*===========================================================================*
  *				schedule_process			     *
  *===========================================================================*/
