@@ -278,6 +278,11 @@ int do_start_scheduling(message *m_ptr)
 /* VERSÃO FINAL E HÍBRIDA DO DO_NICE */
 int do_nice(message *m_ptr)
 {
+
+/* LINHA DE DEBUG TEMPORÁRIA */
+    printf("SCHED_DEBUG: do_nice foi chamada! Endpoint: %d, maxprio recebido: %u\n",
+	   m_ptr->m_pm_sched_scheduling_set_nice.endpoint,
+	   m_ptr->m_pm_sched_scheduling_set_nice.maxprio);
     struct schedproc *rmp;
     int rv;
     int proc_nr_n;
