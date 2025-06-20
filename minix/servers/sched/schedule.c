@@ -139,10 +139,15 @@ static int schedule_process(struct schedproc * rmp, unsigned flags) {
 }
 
 /*=========== init_scheduling ===========*/
-void init_scheduling(void) {
-	int r;
-	balance_timeout = BALANCE_TIMEOUT * sys_hz();
-	if ((r = sys_setalarm(balance_timeout, 0)) != OK) panic("sys_setalarm failed: %d", r);
+void init_scheduling(void)
+{
+    /* NOSSA IMPRESSÃO DIGITAL ÚNICA */
+    printf("SCHEDULER: >>> MEU ESCALONADOR FCFS GLOBAL ESTA ATIVO! <<<\n");
+
+    int r;
+    balance_timeout = BALANCE_TIMEOUT * sys_hz();
+    if ((r = sys_setalarm(balance_timeout, 0)) != OK)
+        panic("sys_setalarm failed: %d", r);
 }
 
 /*=========== balance_queues (LÓGICA FCFS) ===========*/
