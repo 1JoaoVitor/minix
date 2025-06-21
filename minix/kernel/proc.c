@@ -1782,45 +1782,57 @@ void dequeue(struct proc *rp)
 /*===========================================================================*
  *				pick_proc				     * 
  *===========================================================================*/
-
-static struct proc * pick_proc(void)
-{
-    /* Decide quem deve rodar agora. */
-    register struct proc *rp;   /* novo processo em execução */
-    struct proc **rdy_head;
-    int q;                      /* iterador para as filas */
-
-    rdy_head = get_cpulocal_var(run_q_head);
-
-    /* 1. PRIMEIRO, CHECAR AS FILAS DE SISTEMA COM PRIORIDADE ESTRITA */
-    /* Isso é essencial para a estabilidade e o boot do sistema. */
-    for (q=0; q < USER_Q; q++) {
-        if ( (rp = rdy_head[q]) != NULL) {
-            assert(proc_is_runnable(rp));
-            if (priv(rp)->s_flags & BILLABLE)
-                get_cpulocal_var(bill_ptr) = rp;
-            return rp;
-        }
-    }
-
-    /* 2. SE NÃO HÁ PROCESSOS DE SISTEMA, PROCURA POR PROCESSOS DE USUÁRIO */
-    /* Para simular FCFS, tratamos todas as filas de usuário como uma só. */
-    /* Simplesmente procuramos em todas as filas de usuário e retornamos o primeiro que encontrarmos. */
-    for (q=USER_Q; q < NR_SCHED_QUEUES; q++) {
-        if ( (rp = rdy_head[q]) != NULL) {
-            assert(proc_is_runnable(rp));
-            if (priv(rp)->s_flags & BILLABLE)
-                get_cpulocal_var(bill_ptr) = rp;
-            return rp;
-        }
-    }
-
-    /* Se nenhuma fila (nem de sistema, nem de usuário) tem um processo pronto,
-     * não há nada para escalonar. Isso não deve acontecer em um sistema funcional,
-     * pois o processo IDLE sempre estará disponível, mas retornamos NULL para consistência.
-     */
-    return NULL;
-}
+	static struct proc * pick_proc(void)
+	{
+	/* Decide quem deve rodar agora. */
+	    register struct proc *rp;   /* novo processo em execução */
+	    struct proc **rdy_head;
+	    int q;                      /* iterador para as filas */
+	
+	    /* Variável estática para lembrar a última fila de usuário checada.
+	     * Ela mantém seu valor entre as chamadas da função. */
+	    static int next_rq = USER_Q;
+	
+	    rdy_head = get_cpulocal_var(run_q_head);
+	
+	    /* 1. PRIMEIRO, CHECAR AS FILAS DE SISTEMA COM PRIORIDADE ESTRITA */
+	    for (q=0; q < USER_Q; q++) {
+	        if ( (rp = rdy_head[q]) != NULL) {
+	            assert(proc_is_runnable(rp));
+	            if (priv(rp)->s_flags & BILLABLE)
+	                get_cpulocal_var(bill_ptr) = rp;
+	            return rp;
+	        }
+	    }
+	
+	    /* 2. SE NÃO HÁ PROCESSOS DE SISTEMA, PROCURA POR PROCESSOS DE USUÁRIO
+	     * USANDO ROUND-ROBIN ENTRE AS FILAS PARA GARANTIR JUSTIÇA.
+	     */
+	    rp = NULL;
+	    q = next_rq;
+	    do {
+	        if ((rp = rdy_head[q]) != NULL) {
+	            /* Encontramos um processo. Vamos atualizar a próxima fila a ser
+	             * checada para a próxima vez, e retornar este processo. */
+	            next_rq = (q + 1) % NR_SCHED_QUEUES;
+	            if (next_rq < USER_Q) { /* Garante que nunca comece de uma fila de sistema */
+	                next_rq = USER_Q;
+	            }
+	            
+	            assert(proc_is_runnable(rp));
+	            if (priv(rp)->s_flags & BILLABLE)
+	                get_cpulocal_var(bill_ptr) = rp;
+	            return rp;
+	        }
+	        /* Vai para a próxima fila de forma circular */
+	        q = (q + 1) % NR_SCHED_QUEUES;
+	        if (q < USER_Q) { /* Pula as filas de sistema na busca circular */
+	            q = USER_Q;
+	        }
+	    } while (q != next_rq); /* Para se já checamos todas as filas de usuário */
+	
+	    return NULL;
+	}
 
 /*===========================================================================*
  *				endpoint_lookup				     *
