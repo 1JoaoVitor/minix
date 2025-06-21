@@ -198,16 +198,20 @@ int do_start_scheduling(message *m_ptr)
 		break;
 		
 	case SCHEDULING_INHERIT:
-		/* Inherit current priority and time slice from parent. Since there
-		 * is currently only one scheduler scheduling the whole system, this
-		 * value is local and we assert that the parent endpoint is valid */
-		if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
-				&parent_nr_n)) != OK)
-			return rv;
-
-		rmp->priority = schedproc[parent_nr_n].priority;
-		rmp->time_slice = schedproc[parent_nr_n].time_slice;
-		break;
+	    /* Herda a prioridade e o tempo de quantum do pai. */
+	    if ((rv = sched_isokendpt(m_ptr->m_lsys_sched_scheduling_start.parent,
+	        &parent_nr_n)) != OK)
+	        return rv;
+	
+	    rmp->priority = schedproc[parent_nr_n].priority;
+	
+	    /* * AQUI ESTÁ A MUDANÇA PARA O FCFS NÃO-PREEMPTIVO:
+	     * Nós sobrescrevemos o quantum herdado com um valor gigante.
+	     * 10000 ticks é um tempo extremamente longo.
+	     */
+	    rmp->time_slice = 10000; 
+	
+	    break;
 		
 	default: 
 		/* not reachable */
