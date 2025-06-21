@@ -1782,34 +1782,44 @@ void dequeue(struct proc *rp)
 /*===========================================================================*
  *				pick_proc				     * 
  *===========================================================================*/
+
 static struct proc * pick_proc(void)
 {
-/* Decide who to run now.  A new process is selected and returned.
- * When a billable process is selected, record it in 'bill_ptr', so that the 
- * clock task can tell who to bill for system time.
- *
- * This function always uses the run queues of the local cpu!
- */
-  register struct proc *rp;			/* process to run */
-  struct proc **rdy_head;
-  int q;				/* iterate over queues */
+    /* Decide quem deve rodar agora. */
+    register struct proc *rp;   /* novo processo em execução */
+    struct proc **rdy_head;
+    int q;                      /* iterador para as filas */
 
-  /* Check each of the scheduling queues for ready processes. The number of
-   * queues is defined in proc.h, and priorities are set in the task table.
-   * If there are no processes ready to run, return NULL.
-   */
-  rdy_head = get_cpulocal_var(run_q_head);
-  for (q=0; q < NR_SCHED_QUEUES; q++) {	
-	if(!(rp = rdy_head[q])) {
-		TRACE(VF_PICKPROC, printf("cpu %d queue %d empty\n", cpuid, q););
-		continue;
-	}
-	assert(proc_is_runnable(rp));
-	if (priv(rp)->s_flags & BILLABLE)	 	
-		get_cpulocal_var(bill_ptr) = rp; /* bill for system time */
-	return rp;
-  }
-  return NULL;
+    rdy_head = get_cpulocal_var(run_q_head);
+
+    /* 1. PRIMEIRO, CHECAR AS FILAS DE SISTEMA COM PRIORIDADE ESTRITA */
+    /* Isso é essencial para a estabilidade e o boot do sistema. */
+    for (q=0; q < USER_Q; q++) {
+        if ( (rp = rdy_head[q]) != NULL) {
+            assert(proc_is_runnable(rp));
+            if (priv(rp)->s_flags & BILLABLE)
+                get_cpulocal_var(bill_ptr) = rp;
+            return rp;
+        }
+    }
+
+    /* 2. SE NÃO HÁ PROCESSOS DE SISTEMA, PROCURA POR PROCESSOS DE USUÁRIO */
+    /* Para simular FCFS, tratamos todas as filas de usuário como uma só. */
+    /* Simplesmente procuramos em todas as filas de usuário e retornamos o primeiro que encontrarmos. */
+    for (q=USER_Q; q < NR_SCHED_QUEUES; q++) {
+        if ( (rp = rdy_head[q]) != NULL) {
+            assert(proc_is_runnable(rp));
+            if (priv(rp)->s_flags & BILLABLE)
+                get_cpulocal_var(bill_ptr) = rp;
+            return rp;
+        }
+    }
+
+    /* Se nenhuma fila (nem de sistema, nem de usuário) tem um processo pronto,
+     * não há nada para escalonar. Isso não deve acontecer em um sistema funcional,
+     * pois o processo IDLE sempre estará disponível, mas retornamos NULL para consistência.
+     */
+    return NULL;
 }
 
 /*===========================================================================*
