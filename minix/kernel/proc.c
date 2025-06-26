@@ -38,7 +38,7 @@
 #include "clock.h"
 #include "spinlock.h"
 #include "arch_proto.h"
-
+#include <machine/cycle.h> /*adicionado para o pick_proc de lottery*/
 #include <minix/syslib.h>
 
 /* Scheduling and message passing functions */
@@ -1782,35 +1782,103 @@ void dequeue(struct proc *rp)
 /*===========================================================================*
  *				pick_proc				     * 
  *===========================================================================*/
+
+
+/*===========================================================================*
+ * pick_proc (VERSÃO LOTTERY SCHEDULING)              
+ * *===========================================================================*/
 static struct proc * pick_proc(void)
 {
-/* Decide who to run now.  A new process is selected and returned.
- * When a billable process is selected, record it in 'bill_ptr', so that the 
- * clock task can tell who to bill for system time.
- *
- * This function always uses the run queues of the local cpu!
- */
-  register struct proc *rp;			/* process to run */
-  struct proc **rdy_head;
-  int q;				/* iterate over queues */
+    register struct proc *rp;   /* processo a ser retornado */
+    struct proc **rdy_head;
+    int q;                      /* iterador para as filas */
 
-  /* Check each of the scheduling queues for ready processes. The number of
-   * queues is defined in proc.h, and priorities are set in the task table.
-   * If there are no processes ready to run, return NULL.
-   */
-  rdy_head = get_cpulocal_var(run_q_head);
-  for (q=0; q < NR_SCHED_QUEUES; q++) {	
-	if(!(rp = rdy_head[q])) {
-		TRACE(VF_PICKPROC, printf("cpu %d queue %d empty\n", cpuid, q););
-		continue;
-	}
-	assert(proc_is_runnable(rp));
-	if (priv(rp)->s_flags & BILLABLE)	 	
-		get_cpulocal_var(bill_ptr) = rp; /* bill for system time */
-	return rp;
-  }
-  return NULL;
+    rdy_head = get_cpulocal_var(run_q_head);
+
+    /* 1. PRIMEIRO, CHECAMOS AS FILAS DE SISTEMA COM PRIORIDADE ESTRITA */
+    /* Isto é crucial para a estabilidade do sistema e para o boot. */
+    for (q = 0; q < USER_Q; q++) {
+        if ((rp = rdy_head[q]) != NULL) {
+            assert(proc_is_runnable(rp));
+            if (priv(rp)->s_flags & BILLABLE)
+                get_cpulocal_var(bill_ptr) = rp;
+            return rp;
+        }
+    }
+
+    /* 2. SE NÃO HÁ PROCESSOS DE SISTEMA, REALIZAMOS A LOTERIA PARA OS DE USUÁRIO */
+    
+    /* a. Contamos o total de bilhetes de todos os processos de usuário PRONTOS */
+    unsigned int total_tickets = 0;
+    for (q = USER_Q; q < NR_SCHED_QUEUES; q++) {
+        for (rp = rdy_head[q]; rp != NULL; rp = rp->p_nextready) {
+            /* Se um processo ainda não tem bilhetes, damos um valor padrão de 100.
+             * Esta é uma forma simples de inicializar. */
+            if (rp->p_tickets == 0) {
+                rp->p_tickets = 100;
+            }
+            total_tickets += rp->p_tickets;
+        }
+    }
+
+    /* Se não há nenhum processo de usuário pronto, não há o que fazer. */
+    if (total_tickets == 0) {
+        return NULL;
+    }
+
+    /* b. Sorteamos um "bilhete premiado" */
+    unsigned int winning_ticket = read_cycles() % total_tickets;
+    
+    /* c. Encontramos o processo vencedor */
+    unsigned int ticket_counter = 0;
+    for (q = USER_Q; q < NR_SCHED_QUEUES; q++) {
+        for (rp = rdy_head[q]; rp != NULL; rp = rp->p_nextready) {
+            ticket_counter += rp->p_tickets;
+
+            /* Se o contador de bilhetes ultrapassou o bilhete premiado,
+             * encontramos nosso vencedor! */
+            if (ticket_counter > winning_ticket) {
+                assert(proc_is_runnable(rp));
+                if (priv(rp)->s_flags & BILLABLE)
+                    get_cpulocal_var(bill_ptr) = rp;
+                return rp;
+            }
+        }
+    }
+
+    /* Esta parte não deve ser alcançada se total_tickets > 0, mas por segurança: */
+    return NULL;
 }
+
+// static struct proc * pick_proc(void)
+// {
+// /* Decide who to run now.  A new process is selected and returned.
+//  * When a billable process is selected, record it in 'bill_ptr', so that the 
+//  * clock task can tell who to bill for system time.
+//  *
+//  * This function always uses the run queues of the local cpu!
+//  */
+//   register struct proc *rp;			/* process to run */
+//   struct proc **rdy_head;
+//   int q;				/* iterate over queues */
+
+//   /* Check each of the scheduling queues for ready processes. The number of
+//    * queues is defined in proc.h, and priorities are set in the task table.
+//    * If there are no processes ready to run, return NULL.
+//    */
+//   rdy_head = get_cpulocal_var(run_q_head);
+//   for (q=0; q < NR_SCHED_QUEUES; q++) {	
+// 	if(!(rp = rdy_head[q])) {
+// 		TRACE(VF_PICKPROC, printf("cpu %d queue %d empty\n", cpuid, q););
+// 		continue;
+// 	}
+// 	assert(proc_is_runnable(rp));
+// 	if (priv(rp)->s_flags & BILLABLE)	 	
+// 		get_cpulocal_var(bill_ptr) = rp; /* bill for system time */
+// 	return rp;
+//   }
+//   return NULL;
+// }
 
 /*===========================================================================*
  *				endpoint_lookup				     *
