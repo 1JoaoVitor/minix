@@ -33,10 +33,6 @@ EXTERN struct schedproc {
 	bitchunk_t cpu_mask[BITMAP_CHUNKS(CONFIG_MAX_CPUS)]; /* what CPUs is the
 								process allowed
 								to run on */
-/* --- NOVOS CAMPOS PARA O SPN --- */
-	unsigned long estimated_burst_time; /* (tau) Nossa estimativa de burst em ticks */
-	clock_t burst_start_time;            /* Momento (em ticks) que o burst atual começou */
-	unsigned time_waiting;  
 } schedproc[NR_PROCS];
 
 /* Flag values */
