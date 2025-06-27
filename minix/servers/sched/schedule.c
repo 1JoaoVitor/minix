@@ -1,4 +1,4 @@
-/* This file contains the scheduling policy for SCHED
+/* This file contains the SPN (Shortest Process Next) scheduling policy for SCHED
  *
  * The entry points are:
  *   do_noquantum:        Called on behalf of process' that run out of quantum
@@ -16,6 +16,10 @@
 static unsigned balance_timeout;
 
 #define BALANCE_TIMEOUT	5 /* how often to balance queues in seconds */
+#define BURST_ESTIMATION_ALPHA 50 /* Alpha parameter for exponential averaging (0-100) */
+#define DEFAULT_BURST_ESTIMATE 100 /* Default burst time estimate for new processes */
+#define MIN_BURST_ESTIMATE 10 /* Minimum burst estimate to prevent starvation */
+#define MAX_BURST_ESTIMATE 1000 /* Maximum burst estimate */
 
 static int schedule_process(struct schedproc * rmp, unsigned flags);
 
@@ -40,10 +44,15 @@ static int schedule_process(struct schedproc * rmp, unsigned flags);
 
 #define DEFAULT_USER_TIME_SLICE 200
 
-/* processes created by RS are sysytem processes */
+/* processes created by RS are system processes */
 #define is_system_proc(p)	((p)->parent == RS_PROC_NR)
 
 static unsigned cpu_proc[CONFIG_MAX_CPUS];
+
+/* SPN-specific functions */
+static void update_burst_estimate(struct schedproc *rmp, clock_t actual_burst);
+static int calculate_spn_priority(struct schedproc *rmp);
+static void sort_ready_processes(void);
 
 static void pick_cpu(struct schedproc * proc)
 {
@@ -56,7 +65,7 @@ static void pick_cpu(struct schedproc * proc)
 		return;
 	}
 
-	/* schedule sysytem processes only on the boot cpu */
+	/* schedule system processes only on the boot cpu */
 	if (is_system_proc(proc)) {
 		proc->cpu = machine.bsp_id;
 		return;
@@ -81,13 +90,74 @@ static void pick_cpu(struct schedproc * proc)
 }
 
 /*===========================================================================*
+ *				update_burst_estimate			     *
+ *===========================================================================*/
+static void update_burst_estimate(struct schedproc *rmp, clock_t actual_burst)
+{
+	/* Exponential averaging: new_estimate = alpha * actual + (1-alpha) * old_estimate */
+	/* Using integer arithmetic to avoid floating point */
+	int alpha = BURST_ESTIMATION_ALPHA;
+	int new_estimate;
+	
+	if (actual_burst <= 0) {
+		actual_burst = 1; /* Avoid zero or negative values */
+	}
+	
+	new_estimate = (alpha * actual_burst + (100 - alpha) * rmp->burst_estimate) / 100;
+	
+	/* Ensure estimate stays within reasonable bounds */
+	if (new_estimate < MIN_BURST_ESTIMATE) {
+		new_estimate = MIN_BURST_ESTIMATE;
+	} else if (new_estimate > MAX_BURST_ESTIMATE) {
+		new_estimate = MAX_BURST_ESTIMATE;
+	}
+	
+	rmp->burst_estimate = new_estimate;
+}
+
+/*===========================================================================*
+ *				calculate_spn_priority			     *
+ *===========================================================================*/
+static int calculate_spn_priority(struct schedproc *rmp)
+{
+	/* For SPN, lower burst estimate = higher priority (lower priority number) */
+	/* Map burst estimate to priority queue */
+	int priority;
+	
+	/* System processes get highest priority */
+	if (is_system_proc(rmp)) {
+		return rmp->max_priority; /* Keep system process priority */
+	}
+	
+	/* Map burst estimate to priority levels */
+	if (rmp->burst_estimate <= 20) {
+		priority = USER_Q; /* Highest user priority */
+	} else if (rmp->burst_estimate <= 50) {
+		priority = USER_Q + 1;
+	} else if (rmp->burst_estimate <= 100) {
+		priority = USER_Q + 2;
+	} else if (rmp->burst_estimate <= 200) {
+		priority = USER_Q + 3;
+	} else {
+		priority = MIN_USER_Q; /* Lowest user priority */
+	}
+	
+	/* Ensure we don't exceed queue limits */
+	if (priority > MIN_USER_Q) {
+		priority = MIN_USER_Q;
+	}
+	
+	return priority;
+}
+
+/*===========================================================================*
  *				do_noquantum				     *
  *===========================================================================*/
-
 int do_noquantum(message *m_ptr)
 {
 	register struct schedproc *rmp;
 	int rv, proc_nr_n;
+	clock_t actual_burst;
 
 	if (sched_isokendpt(m_ptr->m_source, &proc_nr_n) != OK) {
 		printf("SCHED: WARNING: got an invalid endpoint in OOQ msg %u.\n",
@@ -97,9 +167,19 @@ int do_noquantum(message *m_ptr)
 
 	rmp = &schedproc[proc_nr_n];
 
-	if (rmp->priority < MIN_USER_Q) {
-		rmp->priority += 1; /* lower priority */
+	/* Calculate actual burst time (time since last scheduling) */
+	actual_burst = rmp->time_slice; /* Process used full quantum */
+	
+	/* Update burst estimate based on actual usage */
+	update_burst_estimate(rmp, actual_burst);
+	
+	/* Recalculate priority based on new burst estimate */
+	if (!is_system_proc(rmp)) {
+		rmp->priority = calculate_spn_priority(rmp);
 	}
+
+	/* Record start time for next burst measurement */
+	rmp->last_start_time = get_system_time();
 
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		return rv;
@@ -114,6 +194,7 @@ int do_stop_scheduling(message *m_ptr)
 {
 	register struct schedproc *rmp;
 	int proc_nr_n;
+	clock_t current_time, actual_burst;
 
 	/* check who can send you requests */
 	if (!accept_message(m_ptr))
@@ -127,6 +208,16 @@ int do_stop_scheduling(message *m_ptr)
 	}
 
 	rmp = &schedproc[proc_nr_n];
+	
+	/* Update burst estimate one final time */
+	current_time = get_system_time();
+	if (rmp->last_start_time > 0) {
+		actual_burst = current_time - rmp->last_start_time;
+		if (actual_burst > 0) {
+			update_burst_estimate(rmp, actual_burst);
+		}
+	}
+	
 #ifdef CONFIG_SMP
 	cpu_proc[rmp->cpu]--;
 #endif
@@ -162,6 +253,11 @@ int do_start_scheduling(message *m_ptr)
 	rmp->endpoint     = m_ptr->m_lsys_sched_scheduling_start.endpoint;
 	rmp->parent       = m_ptr->m_lsys_sched_scheduling_start.parent;
 	rmp->max_priority = m_ptr->m_lsys_sched_scheduling_start.maxprio;
+	
+	/* Initialize SPN-specific fields */
+	rmp->burst_estimate = DEFAULT_BURST_ESTIMATE;
+	rmp->last_start_time = get_system_time();
+	
 	if (rmp->max_priority >= NR_SCHED_QUEUES) {
 		return EINVAL;
 	}
@@ -191,10 +287,11 @@ int do_start_scheduling(message *m_ptr)
 
 	case SCHEDULING_START:
 		/* We have a special case here for system processes, for which
-		 * quanum and priority are set explicitly rather than inherited 
+		 * quantum and priority are set explicitly rather than inherited 
 		 * from the parent */
 		rmp->priority   = rmp->max_priority;
 		rmp->time_slice = m_ptr->m_lsys_sched_scheduling_start.quantum;
+		/* System processes keep their original priority, not SPN */
 		break;
 		
 	case SCHEDULING_INHERIT:
@@ -205,7 +302,16 @@ int do_start_scheduling(message *m_ptr)
 				&parent_nr_n)) != OK)
 			return rv;
 
-		rmp->priority = schedproc[parent_nr_n].priority;
+		/* For user processes, calculate priority based on SPN */
+		if (!is_system_proc(rmp)) {
+			/* Inherit burst estimate from parent or use default */
+			if (!is_system_proc(&schedproc[parent_nr_n])) {
+				rmp->burst_estimate = schedproc[parent_nr_n].burst_estimate;
+			}
+			rmp->priority = calculate_spn_priority(rmp);
+		} else {
+			rmp->priority = schedproc[parent_nr_n].priority;
+		}
 		rmp->time_slice = schedproc[parent_nr_n].time_slice;
 		break;
 		
@@ -281,7 +387,14 @@ int do_nice(message *m_ptr)
 	old_max_q = rmp->max_priority;
 
 	/* Update the proc entry and reschedule the process */
-	rmp->max_priority = rmp->priority = new_q;
+	rmp->max_priority = new_q;
+	
+	/* For user processes, recalculate priority based on SPN */
+	if (!is_system_proc(rmp)) {
+		rmp->priority = calculate_spn_priority(rmp);
+	} else {
+		rmp->priority = new_q;
+	}
 
 	if ((rv = schedule_process_local(rmp)) != OK) {
 		/* Something went wrong when rescheduling the process, roll
@@ -329,7 +442,6 @@ static int schedule_process(struct schedproc * rmp, unsigned flags)
 	return err;
 }
 
-
 /*===========================================================================*
  *				init_scheduling				     *
  *===========================================================================*/
@@ -347,21 +459,34 @@ void init_scheduling(void)
  *				balance_queues				     *
  *===========================================================================*/
 
-/* This function in called every N ticks to rebalance the queues. The current
- * scheduler bumps processes down one priority when ever they run out of
- * quantum. This function will find all proccesses that have been bumped down,
- * and pulls them back up. This default policy will soon be changed.
+/* This function is called every N ticks to rebalance the queues for SPN.
+ * It updates burst estimates and recalculates priorities for all processes.
  */
 void balance_queues(void)
 {
 	struct schedproc *rmp;
 	int r, proc_nr;
+	clock_t current_time;
+
+	current_time = get_system_time();
 
 	for (proc_nr=0, rmp=schedproc; proc_nr < NR_PROCS; proc_nr++, rmp++) {
 		if (rmp->flags & IN_USE) {
-			if (rmp->priority > rmp->max_priority) {
-				rmp->priority -= 1; /* increase priority */
-				schedule_process_local(rmp);
+			/* For user processes, recalculate priority based on current burst estimate */
+			if (!is_system_proc(rmp)) {
+				/* Age the burst estimate slightly to prevent starvation */
+				if (rmp->burst_estimate > MIN_BURST_ESTIMATE) {
+					rmp->burst_estimate = (rmp->burst_estimate * 95) / 100;
+				}
+				
+				/* Recalculate priority */
+				int old_priority = rmp->priority;
+				rmp->priority = calculate_spn_priority(rmp);
+				
+				/* Only reschedule if priority changed */
+				if (rmp->priority != old_priority) {
+					schedule_process_local(rmp);
+				}
 			}
 		}
 	}
