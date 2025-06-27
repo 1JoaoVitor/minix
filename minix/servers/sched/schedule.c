@@ -6,6 +6,7 @@
  *   do_stop_scheduling   Request to stop scheduling a proc
  *   do_nice		  Request to change the nice level on a proc
  *   init_scheduling      Called from main.c to set up/prepare scheduling
+ *   socorro não aguento mais
  */
 #include "sched.h"
 #include "schedproc.h"
