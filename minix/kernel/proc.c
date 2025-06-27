@@ -38,7 +38,6 @@
 #include "clock.h"
 #include "spinlock.h"
 #include "arch_proto.h"
-#include <machine/cycle.h> /*adicionado para o pick_proc de lottery*/
 #include <minix/syslib.h>
 
 /* Scheduling and message passing functions */
@@ -1783,10 +1782,9 @@ void dequeue(struct proc *rp)
  *				pick_proc				     * 
  *===========================================================================*/
 
-
 /*===========================================================================*
- * pick_proc (VERSÃO LOTTERY SCHEDULING)              
- * *===========================================================================*/
+ * pick_proc (VERSÃO LOTTERY FINAL - USANDO UPTIME) *
+ *===========================================================================*/
 static struct proc * pick_proc(void)
 {
     register struct proc *rp;   /* processo a ser retornado */
@@ -1795,8 +1793,7 @@ static struct proc * pick_proc(void)
 
     rdy_head = get_cpulocal_var(run_q_head);
 
-    /* 1. PRIMEIRO, CHECAMOS AS FILAS DE SISTEMA COM PRIORIDADE ESTRITA */
-    /* Isto é crucial para a estabilidade do sistema e para o boot. */
+    /* 1. Checa as filas de sistema com prioridade estrita (essencial para o boot) */
     for (q = 0; q < USER_Q; q++) {
         if ((rp = rdy_head[q]) != NULL) {
             assert(proc_is_runnable(rp));
@@ -1806,37 +1803,31 @@ static struct proc * pick_proc(void)
         }
     }
 
-    /* 2. SE NÃO HÁ PROCESSOS DE SISTEMA, REALIZAMOS A LOTERIA PARA OS DE USUÁRIO */
+    /* 2. Realiza a loteria para os processos de usuário */
     
-    /* a. Contamos o total de bilhetes de todos os processos de usuário PRONTOS */
+    /* a. Conta o total de bilhetes de todos os processos de usuário PRONTOS */
     unsigned int total_tickets = 0;
     for (q = USER_Q; q < NR_SCHED_QUEUES; q++) {
         for (rp = rdy_head[q]; rp != NULL; rp = rp->p_nextready) {
-            /* Se um processo ainda não tem bilhetes, damos um valor padrão de 100.
-             * Esta é uma forma simples de inicializar. */
             if (rp->p_tickets == 0) {
-                rp->p_tickets = 100;
+                rp->p_tickets = 100; /* Valor padrão de bilhetes */
             }
             total_tickets += rp->p_tickets;
         }
     }
 
-    /* Se não há nenhum processo de usuário pronto, não há o que fazer. */
     if (total_tickets == 0) {
         return NULL;
     }
 
-    /* b. Sorteamos um "bilhete premiado" */
-    unsigned int winning_ticket = read_cycles() % total_tickets;
+    /* b. Sorteia um "bilhete premiado" USANDO O UPTIME DO KERNEL */
+    unsigned int winning_ticket = kinfo.uptime % total_tickets;
     
-    /* c. Encontramos o processo vencedor */
+    /* c. Encontra o processo vencedor */
     unsigned int ticket_counter = 0;
     for (q = USER_Q; q < NR_SCHED_QUEUES; q++) {
         for (rp = rdy_head[q]; rp != NULL; rp = rp->p_nextready) {
             ticket_counter += rp->p_tickets;
-
-            /* Se o contador de bilhetes ultrapassou o bilhete premiado,
-             * encontramos nosso vencedor! */
             if (ticket_counter > winning_ticket) {
                 assert(proc_is_runnable(rp));
                 if (priv(rp)->s_flags & BILLABLE)
@@ -1846,10 +1837,8 @@ static struct proc * pick_proc(void)
         }
     }
 
-    /* Esta parte não deve ser alcançada se total_tickets > 0, mas por segurança: */
     return NULL;
 }
-
 // static struct proc * pick_proc(void)
 // {
 // /* Decide who to run now.  A new process is selected and returned.
