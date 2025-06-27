@@ -1783,7 +1783,7 @@ void dequeue(struct proc *rp)
  *===========================================================================*/
 
 /*===========================================================================*
- * pick_proc (VERSÃO LOTTERY FINAL - USANDO UPTIME) *
+ * pick_proc (VERSÃO LOTTERY FINAL - USANDO p_cycles) *
  *===========================================================================*/
 static struct proc * pick_proc(void)
 {
@@ -1793,7 +1793,7 @@ static struct proc * pick_proc(void)
 
     rdy_head = get_cpulocal_var(run_q_head);
 
-    /* 1. Checa as filas de sistema com prioridade estrita (essencial para o boot) */
+    /* 1. Checa as filas de sistema com prioridade estrita */
     for (q = 0; q < USER_Q; q++) {
         if ((rp = rdy_head[q]) != NULL) {
             assert(proc_is_runnable(rp));
@@ -1805,14 +1805,17 @@ static struct proc * pick_proc(void)
 
     /* 2. Realiza a loteria para os processos de usuário */
     
-    /* a. Conta o total de bilhetes de todos os processos de usuário PRONTOS */
+    /* a. Conta o total de bilhetes E o total de ciclos dos processos prontos */
     unsigned int total_tickets = 0;
+    u64_t total_cycles = 0; /* Usamos u64_t para caber o número grande */
+
     for (q = USER_Q; q < NR_SCHED_QUEUES; q++) {
         for (rp = rdy_head[q]; rp != NULL; rp = rp->p_nextready) {
             if (rp->p_tickets == 0) {
                 rp->p_tickets = 100; /* Valor padrão de bilhetes */
             }
             total_tickets += rp->p_tickets;
+            total_cycles += rp->p_cycles; /* Acumula os ciclos de cada processo */
         }
     }
 
@@ -1820,8 +1823,8 @@ static struct proc * pick_proc(void)
         return NULL;
     }
 
-    /* b. Sorteia um "bilhete premiado" USANDO O UPTIME DO KERNEL */
-    unsigned int winning_ticket = kinfo.uptime % total_tickets;
+    /* b. Sorteia um "bilhete premiado" usando a soma dos ciclos */
+    unsigned int winning_ticket = total_cycles % total_tickets;
     
     /* c. Encontra o processo vencedor */
     unsigned int ticket_counter = 0;
