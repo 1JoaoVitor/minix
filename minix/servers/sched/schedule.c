@@ -12,6 +12,9 @@
 #include <assert.h>
 #include <minix/com.h>
 #include <machine/archtypes.h>
+#include <minix/syslib.h>    /* Para sys_times */
+#include <minix/times.h>     /* Para definições de time */
+#include <sys/times.h>       /* Para clock_t */
 
 static unsigned balance_timeout;
 
@@ -53,6 +56,15 @@ static unsigned cpu_proc[CONFIG_MAX_CPUS];
 static void update_burst_estimate(struct schedproc *rmp, clock_t actual_burst);
 static int calculate_spn_priority(struct schedproc *rmp);
 static void sort_ready_processes(void);
+
+static clock_t get_system_time(void)
+{
+    clock_t uptime;
+    if (sys_times(NONE, &uptime, NULL, NULL, NULL) != OK) {
+        return 0;
+    }
+    return uptime;
+}
 
 static void pick_cpu(struct schedproc * proc)
 {
