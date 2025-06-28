@@ -14,7 +14,7 @@
 #include <minix/com.h>
 #include <machine/archtypes.h>
 #include <minix/syslib.h>    /* Para sys_times */
-#include <minix/times.h>     /* Para definições de time */
+
 #include <sys/times.h>       /* Para clock_t */
 
 static unsigned balance_timeout;
